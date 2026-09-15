@@ -34,3 +34,19 @@ class ModelNotTrainedError(MovieDataError):
 
 class DataFileError(MovieDataError):
     """Raised when a data file is missing or cannot be read."""
+
+
+class InvalidPreferenceError(MovieDataError):
+    """Raised when a UserPreference is given a value that makes no sense.
+
+    For example a minimum IMDb score of 15 (the scale only goes to 10), or a
+    year range that ends before it starts.
+    """
+
+
+class AIServiceError(MovieDataError):
+    """Raised when the OpenRouter AI service cannot be reached or refuses us.
+
+    It inherits from MovieDataError like every other CineStat error, so the
+    GUI can keep catching one exception type and show one kind of dialog.
+    """

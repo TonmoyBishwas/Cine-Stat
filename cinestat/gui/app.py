@@ -1,4 +1,4 @@
-"""MovieApp - the main window that holds the four tabs.
+"""MovieApp - the main window that holds the five tabs.
 
 Syllabus Class 7 and 8: the top level of the interface, and the place where
 the data is loaded once and shared with every tab.
@@ -8,7 +8,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from pathlib import Path
 
-from ..loaders import CSVLoader
+from ..loaders import DataLoader
 from ..predictor import SuccessPredictor
 from ..utils import ExportSession
 from ..exceptions import MovieDataError
@@ -17,6 +17,7 @@ from .browse_tab import BrowseTab
 from .charts_tab import ChartsTab
 from .compare_tab import CompareTab
 from .predict_tab import PredictTab
+from .recommend_tab import RecommendTab
 
 
 class MovieApp(tk.Tk):
@@ -27,7 +28,7 @@ class MovieApp(tk.Tk):
     both to the tabs. No tab loads its own copy of the data.
     """
 
-    TAB_CLASSES = [BrowseTab, ChartsTab, CompareTab, PredictTab]
+    TAB_CLASSES = [BrowseTab, ChartsTab, CompareTab, PredictTab, RecommendTab]
 
     def __init__(self, data_path):
         super().__init__()
@@ -61,7 +62,9 @@ class MovieApp(tk.Tk):
         """Read the CSV and train the model. Returns False if it failed."""
         try:
             self._set_status(f"Loading {self.data_path.name}...")
-            self.movies = CSVLoader(self.data_path).to_collection()
+            # The factory picks CSVLoader or TMDBLoader by looking at the
+            # file's columns, so the app opens either dataset unchanged.
+            self.movies = DataLoader.for_file(self.data_path).to_collection()
 
             self._set_status(f"Training the model on {len(self.movies):,} films...")
             self.predictor = SuccessPredictor(self.movies)
@@ -98,6 +101,7 @@ class MovieApp(tk.Tk):
     def _build_tabs(self):
         notebook = ttk.Notebook(self)
         notebook.pack(fill="both", expand=True, padx=10, pady=10)
+        self.notebook = notebook
 
         self.tabs = {}
         # POLYMORPHISM again: every tab class is built the same way, even
@@ -109,16 +113,35 @@ class MovieApp(tk.Tk):
 
     # ---- menu actions -----------------------------------------------------
 
+    def active_tab(self):
+        """The tab on screen right now, if it has rows worth exporting.
+
+        Browse and Recommend both provide a method called `current_rows()`.
+        Because they do, this method can hand back either one and `export()`
+        below does not need to know which it got - it just calls the method.
+        Python calls that DUCK TYPING: "if it answers current_rows(), it is
+        exportable". It is polymorphism without needing a shared base class.
+        """
+        try:
+            widget = self.nametowidget(self.notebook.select())
+        except Exception:
+            return self.tabs["Browse"]
+        if hasattr(widget, "current_rows"):
+            return widget
+        return self.tabs["Browse"]
+
     def export(self, file_format):
-        """Save the rows currently shown on the Browse tab.
+        """Save the rows currently shown on whichever tab is open.
 
         Uses the ExportSession context manager, so the file is always closed
         properly even if writing goes wrong.
         """
-        rows = self.tabs["Browse"].current_rows()
+        tab = self.active_tab()
+        rows = tab.current_rows()
         if not rows:
             messagebox.showinfo("Nothing to export",
-                                "There are no films in the current view.")
+                                f"There is nothing to export on the "
+                                f"{tab.title} tab yet.")
             return
 
         path = filedialog.asksaveasfilename(
@@ -135,9 +158,9 @@ class MovieApp(tk.Tk):
             messagebox.showerror("Export failed", str(error))
             return
 
-        self._set_status(f"Exported {written:,} films to {path}")
+        self._set_status(f"Exported {written:,} rows to {path}")
         messagebox.showinfo("Export complete",
-                            f"Saved {written:,} films to:\n{path}")
+                            f"Saved {written:,} rows to:\n{path}")
 
     def show_about(self):
         messagebox.showinfo(
@@ -149,4 +172,7 @@ class MovieApp(tk.Tk):
             f"{self.movies.year_bounds()[1]}\n"
             f"Model accuracy: R-squared {self.predictor.r2:.3f}\n\n"
             "The prediction uses only information known before a film is "
-            "released, so it never peeks at reviews or vote counts.")
+            "released, so it never peeks at reviews or vote counts.\n\n"
+            "The Recommend tab scores films against the ones you tick and "
+            "explains every suggestion. The explanation can optionally be "
+            "rewritten by an AI through OpenRouter - see .env.example.")

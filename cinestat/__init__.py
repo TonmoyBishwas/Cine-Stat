@@ -3,29 +3,52 @@
 Importing the package gives you the main classes directly:
 
     from cinestat import CSVLoader, MovieCollection, SuccessPredictor
+    from cinestat import UserPreference, ContentRecommender, AIExplainer
 """
 
 from .exceptions import (
     MovieDataError,
     InvalidBudgetError,
+    InvalidGrossError,
     MovieNotFoundError,
     ModelNotTrainedError,
     DataFileError,
+    InvalidPreferenceError,
+    AIServiceError,
 )
 from .movie import Movie
 from .collection import MovieCollection
-from .loaders import DataLoader, CSVLoader, JSONLoader
+from .loaders import DataLoader, CSVLoader, JSONLoader, TMDBLoader
 from .analyzers import BaseAnalyzer, GenreAnalyzer, TrendAnalyzer, FinancialAnalyzer
 from .predictor import SuccessPredictor
+from .preferences import UserPreference
+from .recommenders import (
+    Recommendation,
+    BaseRecommender,
+    ContentRecommender,
+    SimilarityRecommender,
+    PopularityRecommender,
+)
+from .explainers import (
+    BaseExplainer,
+    RuleExplainer,
+    AIExplainer,
+    build_explainer,
+)
 
-__version__ = "1.0"
+__version__ = "1.1"
 
 # Controls what "from cinestat import *" brings in.
 __all__ = [
     "Movie", "MovieCollection",
-    "DataLoader", "CSVLoader", "JSONLoader",
+    "DataLoader", "CSVLoader", "JSONLoader", "TMDBLoader",
     "BaseAnalyzer", "GenreAnalyzer", "TrendAnalyzer", "FinancialAnalyzer",
     "SuccessPredictor",
-    "MovieDataError", "InvalidBudgetError", "MovieNotFoundError",
-    "ModelNotTrainedError", "DataFileError",
+    "UserPreference",
+    "Recommendation", "BaseRecommender", "ContentRecommender",
+    "SimilarityRecommender", "PopularityRecommender",
+    "BaseExplainer", "RuleExplainer", "AIExplainer", "build_explainer",
+    "MovieDataError", "InvalidBudgetError", "InvalidGrossError",
+    "MovieNotFoundError", "ModelNotTrainedError", "DataFileError",
+    "InvalidPreferenceError", "AIServiceError",
 ]

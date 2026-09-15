@@ -5,3 +5,6 @@ exports/
 .DS_Store
 venv/
 .venv/
+
+# The OpenRouter API key lives here and must never be committed.
+.env

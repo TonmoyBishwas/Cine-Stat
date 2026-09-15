@@ -7,6 +7,27 @@ from abc import ABC, abstractmethod
 from tkinter import ttk
 
 
+def muted_colour(widget, dark="#9A9A9A", light="#555555"):
+    """A grey for secondary text that stays readable in dark mode too.
+
+    Hard-coding "#555555" looks right on a white window and almost vanishes
+    on a dark one. macOS switches the whole window to dark at sunset, so the
+    colour has to be worked out at runtime rather than written down.
+
+    We ask the window what colour it is actually painted, average the red,
+    green and blue to get its brightness, and pick the grey that shows up
+    against it.
+    """
+    try:
+        background = widget.winfo_toplevel().cget("background")
+        red, green, blue = widget.winfo_rgb(background)
+    except Exception:
+        return light                 # no idea - assume a normal light window
+    # winfo_rgb answers 0-65535 per channel; 128 is the midpoint of 0-255.
+    brightness = (red + green + blue) / 3 / 257
+    return dark if brightness < 128 else light
+
+
 class BaseTab(ttk.Frame, ABC):
     """Abstract parent for every tab in the window.
 
@@ -52,7 +73,7 @@ class BaseTab(ttk.Frame, ABC):
         ttk.Label(frame, text=text,
                   font=("Helvetica", 15, "bold")).pack(anchor="w")
         if subtitle:
-            ttk.Label(frame, text=subtitle, foreground="#555555",
+            ttk.Label(frame, text=subtitle, foreground=muted_colour(self),
                       wraplength=900, justify="left").pack(anchor="w", pady=(2, 0))
         return frame
 
