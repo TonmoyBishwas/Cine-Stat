@@ -124,6 +124,41 @@ class TestRealDataset(unittest.TestCase):
         r2 = SuccessPredictor(self.collection).train()
         self.assertGreater(r2, 0.5, "model is much worse than expected")
 
+    def test_the_extra_features_are_actually_being_used(self):
+        """The model must beat a model that knows only the budget.
+
+        This is the test that would have caught a real and completely silent
+        bug. Budget is measured in hundreds of millions and the genre columns
+        are 0 or 1 - a spread of eight zeroes - and without a scaling step the
+        least-squares solver throws the small columns away as if they were
+        rounding noise. The full model then scored 0.578563 and the
+        budget-only model scored 0.578563: identical to six decimal places,
+        because genre, rating, month, runtime and year were contributing
+        literally nothing. Nothing crashed and no warning was printed.
+        """
+        predictor = SuccessPredictor(self.collection)
+        full = predictor.train()
+        budget_only = predictor.budget_only_r2()
+
+        self.assertGreater(
+            full, budget_only,
+            "the full model is no better than budget alone - the features "
+            "are being ignored, most likely because they are not scaled")
+
+    def test_the_coefficients_are_not_all_crushed_to_zero(self):
+        """The same bug seen from the other side.
+
+        A coefficient of 0.00000046 dollars per minute of runtime is not a
+        finding about cinema, it is a numerical failure.
+        """
+        predictor = SuccessPredictor(self.collection)
+        predictor.train()
+        meaningful = (predictor.coefficients.abs() > 1.0).sum()
+        self.assertGreater(
+            meaningful, len(predictor.coefficients) // 2,
+            f"only {meaningful} of {len(predictor.coefficients)} coefficients "
+            f"are non-trivial; the features are being discarded")
+
 
 if __name__ == "__main__":
     unittest.main()

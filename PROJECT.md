@@ -1,5 +1,10 @@
 # CineStat — Project Overview
 
+> **Explaining this project to someone?** `explain/` holds a plain-English
+> walkthrough written for a reader who knows Python and data analysis but not
+> OOP: what every file does, how they connect, where each OOP idea lives, and
+> a page of likely viva questions with answers.
+
 > **Branch note.** You are reading the `windows` branch. The core, the
 > notebook and the analysis are identical to `main`; the interface is not.
 > Everything specific to this branch is in §4 ("Making it a Windows program"),
@@ -125,6 +130,17 @@ gives the same "success predictor" feel with a model that actually works.
 **Budget-alone is reported alongside the full model.** Hiding the 0.579 would make the project
 look better and be dishonest. An examiner who spots it costs more than the honesty does.
 
+**Features must be put on a common scale before the regression.** Not a style
+preference — without it the model silently degenerates. Budget is ~1e8 and the
+one-hot columns are 0/1, the feature matrix has a condition number of 3.5e10,
+and the solver drops the small-scale directions: every coefficient except
+`budget` came back ~0 and the full model scored 0.578563 against budget-only's
+0.578563. Identical to six decimal places, because five of the six inputs were
+being ignored. `SuccessPredictor.model` is now a pipeline with a
+`StandardScaler` in front, and two tests fail if that is ever removed. This is
+also the underlying cause of the numpy matmul warning that
+`quiet_blas_warning()` suppresses — the warning was the symptom.
+
 **Full syllabus coverage over minimalism.** Every lecture topic has a home in the code, each
 kept to 5–15 commented lines, so each one can be pointed at during judging.
 
@@ -224,7 +240,7 @@ Currently true — but *not yet enforced by a test*. See the backlog.
 | `gui/theme.py` | `Palette` (the colours of one look) and `WindowsTheme` (where each goes), plus `px()`, the chart colours, and the settings for widgets ttk cannot style. Imports only `platform_ui`. |
 | `gui/` | Window, shared base tab, our own `MoviePicker` widget, one file per tab |
 
-**Size:** 2,120 lines core · 2,809 lines GUI · 2,815 lines tests · **291 tests**, still
+**Size:** 2,120 lines core · 2,809 lines GUI · 2,815 lines tests · **300 tests**, still
 under 10 s (the GUI tests build five real windows).
 
 **The GUI layer has an internal order too**, and it is worth keeping:
@@ -388,7 +404,7 @@ hand-calculated matmul exactly, difference `0.0`. Suppressed narrowly in
 setup.bat                                        :: once - makes .venv, installs, tests
 run.bat                                          :: the desktop app
 run.bat data\tmdb.csv                            :: ...on the big Kaggle dataset
-py -m unittest discover tests                    :: 291 tests
+py -m unittest discover tests                    :: 300 tests
 py tools\make_icon.py                            :: only if the icon changes
 ```
 
@@ -402,7 +418,7 @@ set CINESTAT_UI_SCALE=1.5                        :: pretend this is a 150% lapto
 ```bash
 python3 main.py
 jupyter notebook notebooks/01_movie_analysis.ipynb   # Part 1
-python3 -m unittest discover tests                   # 291 tests
+python3 -m unittest discover tests                   # 300 tests
 ```
 
 Python 3.12 with `pandas`, `numpy`, `matplotlib`, `seaborn`, `scikit-learn`, `requests` and

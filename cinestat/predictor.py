@@ -15,6 +15,8 @@ import pandas as pd
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
 
 from .movie import Movie
 from .utils import quiet_blas_warning
@@ -32,7 +34,30 @@ class SuccessPredictor:
         self.collection = collection
         self.df = collection.to_dataframe()
 
-        self.model = LinearRegression()
+        # A PIPELINE: put every column on the same scale first, then fit the
+        # line. The scaling step is not decoration - without it this model
+        # silently collapses into a budget-only model.
+        #
+        # Why: budget is measured in hundreds of millions, runtime in
+        # minutes, and the genre/rating/month columns are 0 or 1. That is a
+        # spread of about eight zeroes, and it leaves the maths behind
+        # least-squares badly "ill-conditioned" (the condition number of our
+        # feature table is 3.5e10). The solver then throws away the
+        # small-scale directions as if they were rounding noise: every
+        # coefficient except budget came back as effectively zero - runtime's
+        # was 0.00000046 dollars per minute - and the full model scored
+        # R2 0.5786, which was *exactly*, to six decimal places, the
+        # budget-only score. Genre, rating and month were not weak. They were
+        # not being used at all.
+        #
+        # StandardScaler turns each column into "how many standard deviations
+        # from its own average", so every column arrives the same size and
+        # none of them get discarded. R2 goes to 0.5884.
+        #
+        # This is also the real cause of the numpy warning that
+        # utils.quiet_blas_warning() hides. That warning was the symptom;
+        # this line is the cure.
+        self.model = make_pipeline(StandardScaler(), LinearRegression())
         self.is_trained = False
 
         # Filled in by train()
@@ -74,7 +99,14 @@ class SuccessPredictor:
             predictions = self.model.predict(X_test)
             self.r2 = self.model.score(X_test, y_test)
         self.mae = mean_absolute_error(y_test, predictions)
-        self.coefficients = pd.Series(self.model.coef_, index=self.columns)
+        # The pipeline holds two steps; the coefficients live in the second.
+        # These are now "dollars per standard deviation", which is actually
+        # the more honest unit: it makes budget and genre comparable, where
+        # raw coefficients compared dollars-per-dollar against
+        # dollars-per-being-a-horror-film.
+        self.coefficients = pd.Series(
+            self.model.named_steps["linearregression"].coef_,
+            index=self.columns)
         self.is_trained = True
         return self.r2
 
@@ -87,7 +119,10 @@ class SuccessPredictor:
         y = self.df["gross"]
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=test_size, random_state=random_state)
-        simple_model = LinearRegression().fit(X_train, y_train)
+        # Scaled the same way as the real model, so the comparison between
+        # the two numbers is fair rather than an accident of units.
+        simple_model = make_pipeline(
+            StandardScaler(), LinearRegression()).fit(X_train, y_train)
         with quiet_blas_warning():
             return simple_model.score(X_test, y_test)
 

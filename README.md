@@ -15,6 +15,10 @@ and **what should I watch next?**
 
 > Working on this project? Read **[PROJECT.md](PROJECT.md)** first — it records the
 > decisions and why they were made, the rules new code must follow, and the feature backlog.
+>
+> **New to the project, or about to present it?** Read
+> **[explain/](explain/README.md)** — a plain-English walkthrough of what every
+> file does, how they fit together, and where each OOP idea lives in the code.
 
 The project comes in two halves that share the same code:
 
@@ -43,7 +47,7 @@ anything goes wrong so the error can actually be read.
 ```bat
 py -m pip install -r requirements.txt   :: pandas, numpy, matplotlib, seaborn, scikit-learn, requests
 py main.py                              :: launches the app
-py -m unittest discover tests           :: runs all 291 tests
+py -m unittest discover tests           :: runs all 300 tests
 ```
 
 `py` is the launcher the official python.org installer puts on the PATH. If
@@ -385,7 +389,7 @@ there.
 | 8 | **MVC-lite, multi-file GUI** | Logic in `cinestat/`, interface in `cinestat/gui/`. Tabs ask the analysis classes for answers; they never calculate anything themselves |
 | 9 | **Custom exceptions** | `MovieDataError` → `InvalidBudgetError`, `InvalidGrossError`, `MovieNotFoundError`, `ModelNotTrainedError`, `DataFileError`, `InvalidPreferenceError`, `AIServiceError` |
 | 9 | **Context manager**, File I/O, `pathlib` | `ExportSession` (`__enter__` / `__exit__`) and `quiet_blas_warning` (`@contextmanager`) — `cinestat/utils.py`; `with pd.read_csv(chunksize=...)` in `TMDBLoader.load()`; `read_env_file()` reading the `.env` |
-| 10 | **unittest**, modules, packages, imports | `tests/` — 220 tests; `cinestat/` and `cinestat/gui/` are proper packages |
+| 10 | **unittest**, modules, packages, imports | `tests/` — 300 tests; `cinestat/` and `cinestat/gui/` are proper packages |
 | 11 | **Decorators** | `@timed` on `BaseAnalyzer.run()` — prints how long each analysis took |
 | 11 | **Iterators and generators** | `MovieCollection.__iter__`; `filter_by()`, `search()`, `in_year_range()` all `yield` |
 | 11 | Functions as objects | `ChartsTab.charts` maps a chart name to the *method* that draws it; `RecommendTab.ENGINES` maps a menu label to the *class* that provides it |
@@ -425,7 +429,7 @@ CineStat/
 │       ├── compare_tab.py
 │       ├── predict_tab.py
 │       └── recommend_tab.py
-├── tests/                             # 291 unittest tests
+├── tests/                             # 300 unittest tests
 ├── .env.example                       # copy to .env and add an OpenRouter key
 ├── main.py                            # py main.py [optional data file]
 └── requirements.txt
@@ -523,6 +527,19 @@ preference`, guarded by `test_an_empty_profile_is_not_thrown_away`.
 the event loop. `RecommendTab.recommend()` therefore calls `show_reasons()` itself rather
 than waiting for the event.
 
+**A model can stop using its own features without telling you.** Budget is measured in
+hundreds of millions and the one-hot genre columns are 0 or 1 — a spread of about eight
+zeroes, which leaves the least-squares arithmetic badly ill-conditioned (condition number
+3.5e10). The solver discarded the small-scale directions as if they were rounding noise:
+every coefficient except `budget` came back effectively zero — runtime's was 0.00000046
+dollars per minute — and the full model scored **0.578563**, which was *exactly*, to six
+decimal places, the budget-only score. Genre, rating, month, runtime and year were not weak
+contributors; they were not being used at all. Nothing crashed and nothing warned. The fix is
+one `StandardScaler` step in front of the regression, which is also the real cause of the
+numpy warning `utils.quiet_blas_warning()` hides. Guarded by
+`test_the_extra_features_are_actually_being_used` and
+`test_the_coefficients_are_not_all_crushed_to_zero`.
+
 ### ...and four more that are specific to Windows
 
 **A menu `accelerator=` binds nothing.** It writes the shortcut down the right-hand side of
@@ -556,7 +573,7 @@ Back and Forward arrows — far more eye-catching than the buttons that actually
 py -m unittest discover tests -v
 ```
 
-**291 tests** covering the `Movie` validation rules, every dunder method, the generators,
+**300 tests** covering the `Movie` validation rules, every dunder method, the generators,
 the abstract base classes, the context manager, the model, the taste profile, all three
 recommenders, both explainers, `TMDBLoader`'s chunked reading, and all five GUI tabs
 (including that a bad budget produces a dialog rather than a crash).
