@@ -241,6 +241,46 @@ class TestTalkingToOpenRouter(unittest.TestCase):
         self.assertIn("401", str(caught.exception))
         self.assertIn("No auth credentials", str(caught.exception))
 
+    def test_a_retired_model_says_so_instead_of_blaming_the_key(self):
+        """The bug that made the AI button look permanently broken.
+
+        The default model slug had been retired. OpenRouter answers a retired
+        slug with HTTP 404 "No endpoints found", which from the outside is
+        indistinguishable from a bad API key - so the tab fell back to the
+        offline reasons every single time and the message on screen gave no
+        way to tell which of the two was wrong.
+        """
+        fake = FakeRequests(FakeResponse(
+            404, {"error": {"message": "No endpoints found for test/model."}}))
+        with self.assertRaises(AIServiceError) as caught:
+            self.explain_with(fake)
+
+        message = str(caught.exception)
+        self.assertIn("test/model", message)          # names the actual slug
+        self.assertIn("openrouter.ai/models", message)  # where to get a live one
+        self.assertIn("NOT a problem with your key", message)
+
+    def test_an_empty_wallet_says_so(self):
+        fake = FakeRequests(FakeResponse(
+            402, {"error": {"message": "Insufficient credits"}}))
+        with self.assertRaises(AIServiceError) as caught:
+            self.explain_with(fake)
+        self.assertIn("credit", str(caught.exception).lower())
+
+    def test_a_rejected_key_points_at_the_key(self):
+        fake = FakeRequests(FakeResponse(
+            401, {"error": {"message": "No auth credentials found"}}))
+        with self.assertRaises(AIServiceError) as caught:
+            self.explain_with(fake)
+        self.assertIn("OPENROUTER_API_KEY", str(caught.exception))
+
+    def test_an_error_we_have_no_advice_for_is_left_alone(self):
+        fake = FakeRequests(FakeResponse(
+            500, {"error": {"message": "Internal server error"}}))
+        with self.assertRaises(AIServiceError) as caught:
+            self.explain_with(fake)
+        self.assertIn("Internal server error", str(caught.exception))
+
     def test_a_network_failure_becomes_our_exception(self):
         fake = FakeRequests(raises=OSError("Name or service not known"))
         with self.assertRaises(AIServiceError) as caught:
@@ -355,6 +395,44 @@ class TestPolymorphism(unittest.TestCase):
     def test_the_ai_explainer_has_a_rule_explainer_inside_it(self):
         """COMPOSITION: the AI one HAS-A offline one to fall back on."""
         self.assertIsInstance(AIExplainer(api_key="x").fallback, RuleExplainer)
+
+
+class TestTheDocumentationAgreesWithTheCode(unittest.TestCase):
+    """The default model is written down in three places. They must match.
+
+    This is the test that would have caught the retired-slug bug on the day
+    it was introduced. README.md said the project used one model; the code
+    used another, and the one in the code had been retired. Nobody noticed,
+    because the AI simply fell back to the offline reasons and the tab went
+    on working - quietly, and never with an AI explanation.
+    """
+
+    def setUp(self):
+        from pathlib import Path
+        self.root = Path(__file__).resolve().parent.parent
+        self.model = AIExplainer.DEFAULT_MODEL
+
+    def test_the_default_model_is_the_one_the_readme_promises(self):
+        readme = (self.root / "README.md").read_text(encoding="utf-8")
+        self.assertIn(self.model, readme,
+                      f"README.md does not mention {self.model}, which is "
+                      f"what AIExplainer.DEFAULT_MODEL is set to")
+
+    def test_the_default_model_is_the_one_the_env_example_suggests(self):
+        example = self.root / ".env.example"
+        self.assertTrue(example.exists(),
+                        ".env.example is missing - copy it to .env, do not "
+                        "rename it; the template is what the next person needs")
+        self.assertIn(self.model, example.read_text(encoding="utf-8"))
+
+    def test_the_example_never_contains_a_real_key(self):
+        """A committed file, so this is the one that would leak."""
+        example = (self.root / ".env.example").read_text(encoding="utf-8")
+        for line in example.splitlines():
+            if line.strip().startswith("OPENROUTER_API_KEY="):
+                value = line.partition("=")[2].strip()
+                self.assertIn("put-your-key-here", value,
+                              "a real key is sitting in .env.example")
 
 
 if __name__ == "__main__":

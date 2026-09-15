@@ -158,7 +158,17 @@ class AIExplainer(BaseExplainer):
     API_URL = "https://openrouter.ai/api/v1/chat/completions"
     # A small, cheap, fast model is plenty for writing three sentences.
     # Override it by putting OPENROUTER_MODEL=... in your .env file.
-    DEFAULT_MODEL = "anthropic/claude-3.5-haiku"
+    #
+    # MODEL SLUGS GO STALE. OpenRouter retires them, and a retired one does
+    # not fail politely - it answers HTTP 404 "No endpoints found", which
+    # looks exactly like a broken API key from the outside. This default was
+    # "anthropic/claude-3.5-haiku" and had gone that way, so the AI button
+    # quietly fell back to the offline reasons on every machine. If that
+    # happens again, pick a live slug from https://openrouter.ai/models and
+    # change it here. README.md names this same model, and
+    # test_the_default_model_is_the_one_the_readme_promises keeps the two
+    # from drifting apart again.
+    DEFAULT_MODEL = "google/gemini-2.5-flash-lite"
     TIMEOUT_SECONDS = 60
     # Generous on purpose. Several models on OpenRouter are "reasoning"
     # models: they think to themselves first, and that thinking is charged
@@ -278,7 +288,7 @@ class AIExplainer(BaseExplainer):
         if response.status_code != 200:
             raise AIServiceError(
                 f"OpenRouter refused the request (HTTP {response.status_code}): "
-                f"{self._error_message(response)}")
+                f"{self._error_message(response)}{self._hint(response)}")
 
         return self._read_reply(response)
 
@@ -297,6 +307,31 @@ class AIExplainer(BaseExplainer):
             return self.fallback.explain(recommendation, preference)
 
     # ---- small helpers for reading the reply ------------------------------
+
+    def _hint(self, response):
+        """Turn OpenRouter's HTTP code into something worth acting on.
+
+        Written because of a real afternoon lost to this: a retired model
+        slug answers 404 "No endpoints found", which from the outside looks
+        identical to a broken key - the AI button simply never worked, and
+        the message on screen did not say which of the two it was.
+        """
+        hints = {
+            401: ("The key was not accepted. Check OPENROUTER_API_KEY in "
+                  "your .env, and that the key is still live at "
+                  "https://openrouter.ai/keys"),
+            402: ("The account is out of credit. OpenRouter needs a balance "
+                  "even for the very cheap models."),
+            404: (f"There is no such model as '{self.model}' any more - "
+                  f"slugs get retired. Pick a live one from "
+                  f"https://openrouter.ai/models and put it in your .env as "
+                  f"OPENROUTER_MODEL, or change AIExplainer.DEFAULT_MODEL. "
+                  f"Note this is NOT a problem with your key."),
+            429: ("Too many requests too quickly - wait a moment and press "
+                  "the button again."),
+        }
+        hint = hints.get(response.status_code)
+        return f"\n\n{hint}" if hint else ""
 
     @staticmethod
     def _error_message(response):
