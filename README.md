@@ -5,6 +5,9 @@ United International University · B.Sc. in Data Science
 
 Analysing 40 years of film data to answer one question: **what makes a movie make money?**
 
+> Working on this project? Read **[PROJECT.md](PROJECT.md)** first — it records the
+> decisions and why they were made, the rules new code must follow, and the feature backlog.
+
 The project comes in two halves that share the same code:
 
 | Part | What it is | How to run it |
