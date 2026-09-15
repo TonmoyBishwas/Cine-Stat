@@ -85,7 +85,7 @@ class RecommendTab(BaseTab):
         self._build_settings(self)
 
         columns = ttk.Frame(self)
-        columns.pack(fill="both", expand=True, pady=(10, 0))
+        columns.pack(fill="both", expand=True, pady=(self.px(12), 0))
         columns.columnconfigure(0, weight=0)
         columns.columnconfigure(1, weight=1)
         columns.rowconfigure(0, weight=1)
@@ -98,7 +98,7 @@ class RecommendTab(BaseTab):
 
     def _build_left_panel(self, parent):
         panel = ttk.Frame(parent)
-        panel.grid(row=0, column=0, sticky="nsew", padx=(0, 14))
+        panel.grid(row=0, column=0, sticky="nsew", padx=(0, self.px(16)))
 
         # Reusing the custom widget the Compare tab already uses. Writing it
         # as its own class is what makes this one line possible.
@@ -106,7 +106,8 @@ class RecommendTab(BaseTab):
         self.picker.pack(fill="x")
 
         ttk.Button(panel, text="Add this film to my list",
-                   command=self.add_liked).pack(fill="x", pady=(8, 10))
+                   command=self.add_liked).pack(
+                       fill="x", pady=(self.px(9), self.px(12)))
 
         # Everything that must always be visible is packed to the BOTTOM
         # first. pack() hands out space in the order it is asked, so doing it
@@ -114,60 +115,72 @@ class RecommendTab(BaseTab):
         # the films list gets a chance to swallow it. Pack the list first and
         # its expand=True eats the lot, pushing the profile line off the
         # screen on a smaller window - which is exactly what happened.
-        self.profile_label = ttk.Label(panel, text="", wraplength=300,
+        self.profile_label = ttk.Label(panel, text="",
+                                       wraplength=self.px(300),
                                        justify="left",
                                        foreground=muted_colour(self))
-        self.profile_label.pack(side="bottom", anchor="w", pady=(6, 0))
+        self.profile_label.pack(side="bottom", anchor="w", pady=(self.px(7), 0))
 
-        ttk.Button(panel, text="Recommend films for me",
+        # The whole point of the tab, so it wears the Windows accent colour.
+        ttk.Button(panel, text="Recommend films for me", style="Accent.TButton",
                    command=self.recommend).pack(side="bottom", fill="x",
-                                                pady=(12, 0))
+                                                pady=(self.px(14), 0))
 
         # Packed last, so it expands into whatever height is left over.
-        box = ttk.LabelFrame(panel, text="My films", padding=8)
+        box = ttk.LabelFrame(panel, text="My films", padding=self.px(9))
         box.pack(side="top", fill="both", expand=True)
 
+        # A Listbox is one of the old Tk widgets, so no ttk style reaches it
+        # and it arrives white-on-black-text whatever the window is doing.
+        # theme.listbox_options() hands over the whole set of colours at once,
+        # background and foreground TOGETHER - see the note in theme.py about
+        # what happens when only one of the pair is set.
         self.liked_list = tk.Listbox(box, height=5, exportselection=False,
-                                     activestyle="none")
+                                     activestyle="none",
+                                     **self.theme.listbox_options())
         self.liked_list.pack(fill="both", expand=True)
 
         buttons = ttk.Frame(box)
-        buttons.pack(fill="x", pady=(6, 0))
+        buttons.pack(fill="x", pady=(self.px(7), 0))
         ttk.Button(buttons, text="Remove",
-                   command=self.remove_liked).pack(side="left", expand=True,
-                                                   fill="x", padx=(0, 4))
+                   command=self.remove_liked).pack(
+                       side="left", expand=True, fill="x",
+                       padx=(0, self.px(4)))
         ttk.Button(buttons, text="Clear all",
-                   command=self.clear_liked).pack(side="left", expand=True,
-                                                  fill="x", padx=(4, 0))
+                   command=self.clear_liked).pack(
+                       side="left", expand=True, fill="x",
+                       padx=(self.px(4), 0))
 
     def _build_settings(self, parent):
         """One horizontal strip: how to recommend, and what to leave out."""
-        box = ttk.LabelFrame(parent, text="Settings", padding=(10, 8))
+        box = ttk.LabelFrame(parent, text="Settings",
+                             padding=(self.px(12), self.px(9)))
         box.pack(fill="x")
 
         first_year, last_year = self.movies.year_bounds()
+        near, gap = self.px(6), self.px(22)
 
         ttk.Label(box, text="Method:").pack(side="left")
         self.engine_box = ttk.Combobox(box, state="readonly", width=24,
                                        values=list(self.ENGINES))
         self.engine_box.current(0)
-        self.engine_box.pack(side="left", padx=(5, 20))
+        self.engine_box.pack(side="left", padx=(near, gap))
 
         ttk.Label(box, text="Minimum IMDb:").pack(side="left")
         self.score_spin = ttk.Spinbox(box, from_=0, to=10, increment=0.5,
                                       width=5)
         self.score_spin.set(0)
-        self.score_spin.pack(side="left", padx=(5, 20))
+        self.score_spin.pack(side="left", padx=(near, gap))
 
         ttk.Label(box, text="Years:").pack(side="left")
         self.year_from = ttk.Spinbox(box, from_=first_year, to=last_year,
                                      width=6)
         self.year_from.set(first_year)
-        self.year_from.pack(side="left", padx=(5, 2))
+        self.year_from.pack(side="left", padx=(near, self.px(2)))
         ttk.Label(box, text="to").pack(side="left")
         self.year_to = ttk.Spinbox(box, from_=first_year, to=last_year, width=6)
         self.year_to.set(last_year)
-        self.year_to.pack(side="left", padx=(2, 0))
+        self.year_to.pack(side="left", padx=(self.px(2), 0))
 
     # ---- right: the results and the explanation ---------------------------
 
@@ -185,10 +198,12 @@ class RecommendTab(BaseTab):
                                  columns=[key for key, _, _ in self.COLUMNS],
                                  show="headings", selectmode="browse")
         for key, heading, width in self.COLUMNS:
-            self.tree.heading(key, text=heading)
             anchor = "w" if key in ("name", "genre", "rating") else "e"
-            self.tree.column(key, width=width, anchor=anchor,
+            # The heading lines up with its own figures - see browse_tab.py.
+            self.tree.heading(key, text=heading, anchor=anchor)
+            self.tree.column(key, width=self.px(width), anchor=anchor,
                              stretch=(key == "name"))
+        self.theme.prepare_table(self.tree)
         # Clicking a row shows the reasons for that film straight away.
         self.tree.bind("<<TreeviewSelect>>", self.show_reasons)
 
@@ -199,7 +214,8 @@ class RecommendTab(BaseTab):
         scrollbar.pack(side="right", fill="y")
 
         controls = ttk.Frame(panel)
-        controls.grid(row=1, column=0, sticky="ew", pady=(10, 4))
+        controls.grid(row=1, column=0, sticky="ew",
+                      pady=(self.px(12), self.px(5)))
         self.ai_button = ttk.Button(controls, text="Explain with AI",
                                     command=self.explain_with_ai,
                                     state="disabled")
@@ -207,29 +223,34 @@ class RecommendTab(BaseTab):
         self.export_button = ttk.Button(controls, text="Save these as CSV...",
                                         command=self.export_results,
                                         state="disabled")
-        self.export_button.pack(side="left", padx=(8, 0))
+        self.export_button.pack(side="left", padx=(self.px(9), 0))
 
         # A barber-pole bar that only appears while we are waiting for the
         # AI. Built now, but not packed - it is shown and hidden by
         # explain_with_ai() and _show_ai_result().
         self.progress = ttk.Progressbar(controls, mode="indeterminate",
-                                        length=130)
+                                        length=self.px(140))
 
         self.note = ttk.Label(controls, text="",
-                              foreground=muted_colour(self), wraplength=380)
-        self.note.pack(side="left", padx=(12, 0))
+                              foreground=muted_colour(self),
+                              wraplength=self.px(380))
+        self.note.pack(side="left", padx=(self.px(14), 0))
 
-        explain_box = ttk.LabelFrame(panel, text="Why this film?", padding=8)
+        explain_box = ttk.LabelFrame(panel, text="Why this film?",
+                                     padding=self.px(9))
         explain_box.grid(row=2, column=0, sticky="nsew")
 
-        # No hard-coded colours. This widget used to ask for a near-white
-        # background while leaving the text colour alone - and in macOS dark
-        # mode the text colour is WHITE, so the explanation was white on
-        # white and completely invisible. Left alone, Tkinter uses the same
-        # system colours as the Listbox above, which are correct in both
-        # light mode and dark mode.
+        # No hard-coded colours, and never one half of a colour pair. This
+        # widget used to ask for a near-white background while leaving the
+        # text colour alone - and in dark mode the text colour is WHITE, so
+        # the explanation was white on white and completely invisible while
+        # every test still passed, because the words really were in the box.
+        # theme.text_options() always hands over both colours together, which
+        # is what makes that bug impossible to write again here.
         self.explanation = tk.Text(explain_box, height=9, wrap="word",
-                                   relief="flat", padx=8, pady=6)
+                                   relief="flat", padx=self.px(9),
+                                   pady=self.px(7),
+                                   **self.theme.text_options())
         text_scroll = ttk.Scrollbar(explain_box, orient="vertical",
                                     command=self.explanation.yview)
         self.explanation.configure(yscrollcommand=text_scroll.set)
@@ -427,7 +448,7 @@ class RecommendTab(BaseTab):
         self.ai_button.config(state="disabled", text="Asking the AI...")
         # before= keeps the bar to the left of the message, whatever order
         # the widgets were created in.
-        self.progress.pack(side="left", padx=(12, 0), before=self.note)
+        self.progress.pack(side="left", padx=(self.px(14), 0), before=self.note)
         self.progress.start(12)
         self._write_explanation(
             "Asking the AI to write this up...\n\n"
@@ -509,9 +530,11 @@ class RecommendTab(BaseTab):
     def _refresh_table(self):
         """Empty the table and put the current recommendations back into it."""
         self.tree.delete(*self.tree.get_children())
-        for recommendation in self.results:
+        for position, recommendation in enumerate(self.results):
             movie = recommendation.movie
-            self.tree.insert("", "end", values=(
+            self.tree.insert("", "end",
+                             tags=(self.theme.stripe_row(position),),
+                             values=(
                 recommendation.match,
                 movie.name,
                 movie.year,

@@ -1,5 +1,11 @@
 # CineStat — Project Overview
 
+> **Branch note.** You are reading the `windows` branch. The core, the
+> notebook and the analysis are identical to `main`; the interface is not.
+> Everything specific to this branch is in §4 ("Making it a Windows program"),
+> §5 and §8. If you are working on the analysis rather than on the window,
+> nothing below changes for you.
+
 **DS 1116 · Object Oriented Programming for Data Science Laboratory · Section BA · Spring 2026**
 
 > This file is the working document: what was decided, why, what is left to build, and the
@@ -122,6 +128,39 @@ look better and be dishonest. An examiner who spots it costs more than the hones
 **Full syllabus coverage over minimalism.** Every lecture topic has a home in the code, each
 kept to 5–15 commented lines, so each one can be pointed at during judging.
 
+### Making it a Windows program
+
+**The interface follows the operating system; the analysis does not know there
+is one.** Nothing in `cinestat/` outside `gui/` imports `platform_ui` or
+`theme`. The layer rule in §5 already said the core must not import the GUI;
+this adds that the *platform* lives inside the GUI layer and nowhere else.
+
+**ttk's "clam" theme, not "vista".** The obvious move is `theme_use("vista")`,
+and it is wrong twice: it copies Windows 7, and it cannot be recoloured at all
+because Windows itself does the drawing — which would mean no dark mode, ever.
+clam is the one built-in theme whose every colour can be set, so the Windows
+build uses clam and repaints it to look like Windows 11. Be ready to say this;
+"why not the native theme?" is the obvious question.
+
+**Dark mode is not a skin, it is a rule.** Every colour comes from a `Palette`.
+No file in `cinestat/gui/` outside `theme.py` is allowed to write one down, and
+`test_no_tab_writes_a_colour_down_by_hand` enforces it by reading each file with
+Python's tokeniser. This is the rule that makes the whole thing work, and the
+easiest one to break by accident — one `"#666666"` typed into a tab looks right
+on the machine it was written on and is invisible on a machine set the other way.
+
+**DPI awareness is claimed, so scaling becomes our job.** `SetProcessDpiAwareness`
+stops Windows from stretching the window on a 150% laptop, which is what made
+the text blurry. The price is that every pixel measurement in the interface has
+to go through `theme.px()`. A new widget with a raw pixel size in it is a bug on
+a high-DPI screen — and invisible on the machine it was written on, which is why
+`CINESTAT_UI_SCALE=1.5` exists.
+
+**Every call into Windows is allowed to fail.** `platform_ui` checks
+`sys.platform` and catches `OSError` / `AttributeError` around every `ctypes`
+call. The program must still run on macOS, on Linux, and on a Windows too old
+to have the registry keys it reads. There is a test for each one.
+
 ### The recommender, added after the first submission
 
 **The AI does not choose the films — it only writes them up.** `recommenders.py` picks the
@@ -181,9 +220,17 @@ Currently true — but *not yet enforced by a test*. See the backlog.
 | `recommenders.py` | `Recommendation`, `BaseRecommender(ABC)` → three recommenders |
 | `explainers.py` | `BaseExplainer(ABC)` → `RuleExplainer`, `AIExplainer`; reads the `.env` |
 | `utils.py` | `@timed` decorator, `ExportSession` context manager, `money()` |
+| `gui/platform_ui.py` | **Windows only.** `ctypes` + `winreg`: DPI awareness, taskbar identity, dark mode, accent colour, dark title bar, icon, `shortcut()`. Imports nothing from the project. |
+| `gui/theme.py` | `Palette` (the colours of one look) and `WindowsTheme` (where each goes), plus `px()`, the chart colours, and the settings for widgets ttk cannot style. Imports only `platform_ui`. |
 | `gui/` | Window, shared base tab, our own `MoviePicker` widget, one file per tab |
 
-**Size:** 2,120 lines core · 1,574 lines GUI · 2,097 lines tests · **220 tests**, still ~1.3 s.
+**Size:** 2,120 lines core · 2,809 lines GUI · 2,815 lines tests · **291 tests**, still
+under 10 s (the GUI tests build five real windows).
+
+**The GUI layer has an internal order too**, and it is worth keeping:
+`platform_ui` → `theme` → `base_tab` → the tabs → `app`. `platform_ui` imports
+nothing from the project at all, which is what lets it be tested on any
+operating system without a window.
 
 `requests` is the one new dependency, used by `AIExplainer` and nothing else. It is imported
 *inside* the method rather than at the top of the file, so the rest of CineStat still runs if
@@ -204,6 +251,7 @@ Ordered by how much they add per line of code.
 |---|---|---|
 | **B2** | **Background threading** — *partly done.* The OpenRouter call runs on a `threading.Thread`, with the reply handed back via `self.after(0, ...)`. The original idea — loading the CSV and training off the main thread — is still open and is now the smaller half of the item. | `gui/recommend_tab.py` |
 | **B7** | **Similar films finder** | `SimilarityRecommender`, reachable from the Recommend tab's method dropdown |
+| **W1** | **Windows interface** — dark mode following Windows 11, DPI scaling, Segoe UI, Ctrl shortcuts, an app icon, `run.bat` / `setup.bat` | `gui/platform_ui.py`, `gui/theme.py`, and a `self.px()` / `self.palette` pass over every tab |
 
 ### Gaps against the syllabus — highest value
 
@@ -243,6 +291,18 @@ should take, so the second one is cheaper than the first was.
   environment or `.env`. Tests fake the `requests` module; none of them touch the network.
 - **Keep it explainable.** Anything that cannot be explained line-by-line in a viva is worth
   less than a simpler thing that can.
+
+Three more rules that only exist on this branch, and that the tests enforce:
+
+- **Never write a colour into a tab.** Ask `self.palette` for it. If the colour you want is
+  not in the palette, add it to *both* `LIGHT` and `DARK` — a colour in one and missing from
+  the other is a crash waiting for whoever switches their computer over.
+- **Never write a raw pixel size into a tab.** Wrap it in `self.px()`. Column widths, paddings,
+  wrap lengths, window sizes: all of them. It looks right either way on a 100% screen, which
+  is exactly why it gets forgotten. Check with `set CINESTAT_UI_SCALE=1.5`.
+- **A menu shortcut is two things, and both come from `platform_ui.shortcut()`.** The words in
+  the menu and the sequence passed to `bind_all`. Writing either one by hand is how a menu ends
+  up promising a key that does nothing.
 
 ## 8. Traps already hit
 
@@ -322,11 +382,27 @@ hand-calculated matmul exactly, difference `0.0`. Suppressed narrowly in
 
 ## 9. Running it
 
+**Windows (this branch):**
+
+```bat
+setup.bat                                        :: once - makes .venv, installs, tests
+run.bat                                          :: the desktop app
+run.bat data\tmdb.csv                            :: ...on the big Kaggle dataset
+py -m unittest discover tests                    :: 291 tests
+py tools\make_icon.py                            :: only if the icon changes
+```
+
+```bat
+set CINESTAT_THEME=light                         :: force a look, either way
+set CINESTAT_UI_SCALE=1.5                        :: pretend this is a 150% laptop
+```
+
+**macOS and Linux** — unchanged, and everything Windows-specific turns itself off:
+
 ```bash
-python3 main.py                                      # the desktop app
-python3 main.py data/tmdb.csv                        # ...on the big Kaggle dataset
+python3 main.py
 jupyter notebook notebooks/01_movie_analysis.ipynb   # Part 1
-python3 -m unittest discover tests                   # 220 tests
+python3 -m unittest discover tests                   # 291 tests
 ```
 
 Python 3.12 with `pandas`, `numpy`, `matplotlib`, `seaborn`, `scikit-learn`, `requests` and

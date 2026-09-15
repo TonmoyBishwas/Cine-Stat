@@ -106,6 +106,12 @@ def quiet_blas_warning():
     answers coming out are all valid, and they match a hand-calculated result
     exactly. So the warning is wrong and only confuses the user.
 
+    On Windows, numpy uses OpenBLAS instead and the warning never appears, so
+    this does nothing at all there. It is kept because the same source runs on
+    both, and because a `with` block that filters a warning nobody raised costs
+    nothing - the wrong fix would be to delete it and rediscover the bug on the
+    next Mac the project is opened on.
+
     We hide ONLY that one message, and only for the lines inside the `with`
     block - every other warning still gets through.
 

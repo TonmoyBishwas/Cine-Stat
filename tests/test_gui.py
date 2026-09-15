@@ -446,7 +446,11 @@ class TestApplication(unittest.TestCase):
                 self.assertGreater(gap, 40,
                                    f"{name} does not contrast with the window")
 
-        self.assertIn(muted_colour(tab), ("#9A9A9A", "#555555"))
+        # The grey comes from whichever palette the theme is using, rather
+        # than from a pair of constants written down here - so this stays
+        # true in light mode and in dark mode, and stays true if the palette
+        # is ever retuned.
+        self.assertEqual(muted_colour(tab), self.app.theme.palette.muted)
 
     def test_the_user_can_see_that_the_ai_is_working(self):
         """Regression: a reasoning model takes 5-10 seconds and the window
@@ -560,6 +564,219 @@ class TestApplication(unittest.TestCase):
             app_module.filedialog.asksaveasfilename = original_dialog
             app_module.messagebox.showinfo = original_info
             browse.reset_filters()
+
+    # ---- the Windows build ------------------------------------------------
+    #
+    # Everything from here down is about the things this edition does that
+    # the original Mac one did not: a keyboard that behaves the way Windows
+    # keyboards behave, a menu bar with underlined letters in it, a window
+    # dressed by the theme, and tables that stripe their own rows.
+
+    def test_the_window_has_a_theme(self):
+        from cinestat.gui.theme import WindowsTheme
+        self.assertIsInstance(self.app.theme, WindowsTheme)
+        self.assertIn(self.app.theme.mode, ("light", "dark"))
+
+    def test_every_tab_shares_the_one_theme(self):
+        """Built once by the window, the way the data and the model are."""
+        for tab in self.app.tabs.values():
+            with self.subTest(tab=tab.title):
+                self.assertIs(tab.theme, self.app.theme)
+                self.assertIs(tab.palette, self.app.theme.palette)
+
+    def test_the_menu_bar_has_the_three_menus(self):
+        menubar = self.app.nametowidget(self.app.cget("menu"))
+        labels = [menubar.entrycget(index, "label")
+                  for index in range(menubar.index("end") + 1)]
+        self.assertEqual(labels, ["File", "View", "Help"])
+
+    def test_every_top_level_menu_has_an_underlined_letter(self):
+        """Alt+F has to open File. Windows users reach for it without
+        thinking, and a menu with no `underline=` simply does not answer."""
+        menubar = self.app.nametowidget(self.app.cget("menu"))
+        for index in range(menubar.index("end") + 1):
+            label = menubar.entrycget(index, "label")
+            with self.subTest(menu=label):
+                self.assertGreaterEqual(int(menubar.entrycget(index, "underline")), 0)
+
+    def test_no_two_entries_in_a_menu_share_an_underlined_letter(self):
+        """Alt+C cannot mean both Charts and Compare."""
+        menubar = self.app.nametowidget(self.app.cget("menu"))
+        for index in range(menubar.index("end") + 1):
+            menu = self.app.nametowidget(menubar.entrycget(index, "menu"))
+            letters = []
+            for entry in range(menu.index("end") + 1):
+                if menu.type(entry) == "separator":
+                    continue
+                position = int(menu.entrycget(entry, "underline"))
+                label = menu.entrycget(entry, "label")
+                if 0 <= position < len(label):
+                    letters.append(label[position].lower())
+            with self.subTest(menu=menubar.entrycget(index, "label")):
+                self.assertEqual(len(letters), len(set(letters)),
+                                 f"a letter is claimed twice: {letters}")
+
+    def test_every_shortcut_the_menu_promises_is_actually_bound(self):
+        """The bug this catches is invisible in the source: a menu can
+        advertise Ctrl+E while nothing at all is listening for it, because
+        `accelerator=` only writes the words down."""
+        from cinestat.gui import platform_ui
+
+        promised = {
+            platform_ui.shortcut("e")[0]: platform_ui.shortcut("e")[1],
+            platform_ui.shortcut("e", shift=True)[0]:
+                platform_ui.shortcut("e", shift=True)[1],
+        }
+        for number in range(1, 6):
+            label, sequence = platform_ui.shortcut(str(number))
+            promised[label] = sequence
+
+        menubar = self.app.nametowidget(self.app.cget("menu"))
+        seen = set()
+        for index in range(menubar.index("end") + 1):
+            menu = self.app.nametowidget(menubar.entrycget(index, "menu"))
+            for entry in range(menu.index("end") + 1):
+                if menu.type(entry) == "separator":
+                    continue
+                accelerator = str(menu.entrycget(entry, "accelerator"))
+                if accelerator in promised:
+                    seen.add(accelerator)
+                    with self.subTest(accelerator=accelerator):
+                        self.assertTrue(
+                            self.app.bind_all(promised[accelerator]),
+                            f"{accelerator} is written in the menu but bound "
+                            f"to nothing")
+        self.assertEqual(seen, set(promised),
+                         "a shortcut was bound but never offered in the menu")
+
+    def test_control_and_a_number_jumps_to_that_tab(self):
+        for number, title in enumerate(["Browse", "Charts", "Compare",
+                                        "Predict", "Recommend"], start=1):
+            with self.subTest(tab=title):
+                self.app.show_tab(title)
+                self.app.update_idletasks()
+                self.assertIs(self.app.nametowidget(self.app.notebook.select()),
+                              self.app.tabs[title])
+        self.app.show_tab("Browse")
+
+    def test_control_tab_walks_through_the_tabs_and_wraps_round(self):
+        self.app.show_tab("Recommend")
+        self.app.update_idletasks()
+        self.app.step_tab(1)                    # off the end, back to the start
+        self.app.update_idletasks()
+        self.assertIs(self.app.nametowidget(self.app.notebook.select()),
+                      self.app.tabs["Browse"])
+
+        self.app.step_tab(-1)                   # and back off the front again
+        self.app.update_idletasks()
+        self.assertIs(self.app.nametowidget(self.app.notebook.select()),
+                      self.app.tabs["Recommend"])
+        self.app.show_tab("Browse")
+
+    def test_asking_for_a_tab_that_is_not_there_does_nothing_bad(self):
+        self.app.show_tab("Nonsense")           # must not raise
+
+    def test_the_status_bar_has_a_resize_grip(self):
+        """The corner a Windows user drags to resize a window."""
+        from tkinter import ttk
+
+        def every_widget_under(parent):
+            for child in parent.winfo_children():
+                yield child
+                yield from every_widget_under(child)
+
+        self.assertTrue(
+            any(isinstance(widget, ttk.Sizegrip)
+                for widget in every_widget_under(self.app)),
+            "no ttk.Sizegrip in the status bar")
+
+    def test_the_tables_stripe_their_rows(self):
+        browse = self.app.tabs["Browse"]
+        browse.reset_filters()
+        even, odd = self.app.theme.STRIPE_TAGS
+        rows = browse.tree.get_children()[:4]
+        self.assertEqual(
+            [browse.tree.item(row, "tags")[0] for row in rows],
+            [even, odd, even, odd])
+
+    def test_a_money_column_gets_a_right_aligned_heading(self):
+        """Windows lines a heading up with its own figures."""
+        browse = self.app.tabs["Browse"]
+        self.assertEqual(str(browse.tree.heading("gross", "anchor")), "e")
+        self.assertEqual(str(browse.tree.heading("name", "anchor")), "w")
+
+    def test_sorting_puts_an_arrow_on_the_column_it_sorted_by(self):
+        browse = self.app.tabs["Browse"]
+        browse.reset_filters()
+        up, down = browse.SORT_ARROWS
+
+        browse.sort_by("gross")
+        self.assertIn(up, str(browse.tree.heading("gross", "text")))
+        self.assertNotIn(up, str(browse.tree.heading("name", "text")))
+
+        browse.sort_by("gross")                 # clicking again reverses it
+        self.assertIn(down, str(browse.tree.heading("gross", "text")))
+
+        browse.sort_by("name")                  # ...and the arrow moves along
+        self.assertNotIn(down, str(browse.tree.heading("gross", "text")))
+        self.assertIn(up, str(browse.tree.heading("name", "text")))
+        browse.reset_filters()
+
+    def test_no_tab_writes_a_colour_down_by_hand(self):
+        """Every colour in the interface comes from the palette.
+
+        This is the rule that makes dark mode work, and the one that is
+        easiest to break by accident: a single "#666666" typed into a tab
+        looks fine on the machine it was written on and is invisible on a
+        machine set the other way.
+        """
+        import io
+        import re
+        import token
+        import tokenize
+        from pathlib import Path
+
+        folder = Path(__file__).resolve().parent.parent / "cinestat" / "gui"
+        # theme.py is where the colours are allowed to live, and platform_ui
+        # works out black-or-white for the accent button.
+        allowed = {"theme.py", "platform_ui.py"}
+        looks_like_a_colour = re.compile(r"^#[0-9A-Fa-f]{6}$")
+
+        offenders = []
+        for source in sorted(folder.glob("*.py")):
+            if source.name in allowed:
+                continue
+            text = source.read_text(encoding="utf-8")
+            # Reading the file with `tokenize` rather than with a regular
+            # expression is the point of this test. A line-by-line search has
+            # to guess where the comments end, and the obvious guess - throw
+            # away everything after the first "#" - throws away the "#" that
+            # starts a colour too, so the test passes on a file that is full
+            # of them. Python's own tokeniser does not guess.
+            for item in tokenize.generate_tokens(io.StringIO(text).readline):
+                if item.type != token.STRING:
+                    continue
+                value = item.string.strip("rbuf")        # f"...", b"..."
+                if looks_like_a_colour.match(value.strip("\"'")):
+                    offenders.append(f"{source.name}:{item.start[0]}: "
+                                     f"{item.line.strip()}")
+        self.assertEqual(offenders, [],
+                         "hard-coded colours outside theme.py:\n"
+                         + "\n".join(offenders))
+
+    def test_the_chart_is_drawn_on_the_window_not_on_white_paper(self):
+        charts = self.app.tabs["Charts"]
+        import matplotlib.colors
+        self.assertEqual(
+            charts.figure.get_facecolor(),
+            matplotlib.colors.to_rgba(self.app.theme.palette.surface))
+
+    def test_every_chart_still_draws_with_the_theme_applied(self):
+        charts = self.app.tabs["Charts"]
+        for name in charts.charts:
+            with self.subTest(chart=name):
+                charts.chooser.set(name)
+                charts.draw()
 
 
 if __name__ == "__main__":

@@ -1,0 +1,24 @@
+# Line endings.
+#
+# Git normally guesses, and the guess depends on each machine's core.autocrlf
+# setting - so the same file can arrive differently on two Windows computers.
+# For .bat that is not cosmetic: cmd.exe reads a batch file line by line as it
+# runs it, and a file with Unix line endings can send `goto` to the wrong place
+# or swallow the last line entirely. So the two launchers are pinned to CRLF
+# and everything else to LF, whoever clones this and wherever from.
+
+* text=auto
+
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+*.py   text eol=lf
+*.md   text eol=lf
+*.txt  text eol=lf
+*.csv  text eol=lf
+*.json text eol=lf
+*.ipynb text eol=lf
+
+*.png binary
+*.ico binary
+*.pdf binary

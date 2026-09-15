@@ -41,36 +41,41 @@ class CompareTab(BaseTab):
             "Search for two titles to see their numbers side by side.")
 
         pickers = ttk.Frame(self)
-        pickers.pack(fill="x", pady=(0, 12))
+        pickers.pack(fill="x", pady=(0, self.px(14)))
         pickers.columnconfigure(0, weight=1)
         pickers.columnconfigure(1, weight=1)
 
         # The same custom widget used twice - that is why we wrote it as a class.
         self.left = MoviePicker(pickers, self.movies, "First film",
                                 on_select=self.refresh)
-        self.left.grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        self.left.grid(row=0, column=0, sticky="ew", padx=(0, self.px(7)))
 
         self.right = MoviePicker(pickers, self.movies, "Second film",
                                  on_select=self.refresh)
-        self.right.grid(row=0, column=1, sticky="ew", padx=(6, 0))
+        self.right.grid(row=0, column=1, sticky="ew", padx=(self.px(7), 0))
 
-        self.verdict = ttk.Label(self, text="", font=("Helvetica", 13, "bold"),
-                                 wraplength=900, justify="center")
-        self.verdict.pack(pady=(0, 10))
+        self.verdict = ttk.Label(self, text="",
+                                 font=self.theme.font(12, "bold"),
+                                 wraplength=self.px(900), justify="center")
+        self.verdict.pack(pady=(0, self.px(12)))
 
         self.table = ttk.Treeview(
             self, columns=("field", "left", "right"), show="headings", height=15)
         self.table.heading("field", text="")
         self.table.heading("left", text="First film")
         self.table.heading("right", text="Second film")
-        self.table.column("field", width=190, anchor="w")
-        self.table.column("left", width=260, anchor="center")
-        self.table.column("right", width=260, anchor="center")
+        self.table.column("field", width=self.px(200), anchor="w")
+        self.table.column("left", width=self.px(270), anchor="center")
+        self.table.column("right", width=self.px(270), anchor="center")
         self.table.pack(fill="both", expand=True)
 
         # Rows where one film clearly beats the other get a coloured tag.
-        self.table.tag_configure("left_wins", background="#E8F4EA")
-        self.table.tag_configure("right_wins", background="#E8EFF7")
+        # The two tints come from the palette, so they are a pale green and a
+        # pale blue in light mode and a deep green and a deep blue in dark -
+        # a hard-coded "#E8F4EA" would be an invisible white smear on a dark
+        # window, and unreadable under the white text sitting on it.
+        self.table.tag_configure("left_wins", background=self.palette.first_wins)
+        self.table.tag_configure("right_wins", background=self.palette.second_wins)
 
         self.refresh()
 
@@ -112,7 +117,7 @@ class CompareTab(BaseTab):
         """
         if first == second:
             self.verdict.config(text="That is the same film twice.",
-                                foreground="#666666")
+                                foreground=self.palette.muted)
             return
 
         if first > second:
@@ -121,11 +126,11 @@ class CompareTab(BaseTab):
             winner, loser = second, first
         else:
             self.verdict.config(text="Both films took exactly the same amount.",
-                                foreground="#666666")
+                                foreground=self.palette.muted)
             return
 
         times = winner.gross / loser.gross if loser.gross else 0
         self.verdict.config(
             text=f"{winner.name} took {money(winner.gross)} - "
                  f"{times:.1f}x more than {loser.name}.",
-            foreground="#2E6E3E")
+            foreground=self.palette.positive)

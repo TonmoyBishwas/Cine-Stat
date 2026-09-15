@@ -18,7 +18,11 @@ class MoviePicker(ttk.LabelFrame):
 
     def __init__(self, parent, collection, label="Choose a film",
                  on_select=None):
-        super().__init__(parent, text=label, padding=10)
+        # The picker is built inside a tab, and the tab knows the theme, so
+        # the padding here can be scaled for the screen like everything else.
+        scale = getattr(getattr(parent.winfo_toplevel(), "theme", None),
+                        "px", lambda pixels: pixels)
+        super().__init__(parent, text=label, padding=scale(12))
         self.collection = collection
         self.on_select = on_select      # a function to call after a choice
         self.selected = None
@@ -26,7 +30,7 @@ class MoviePicker(ttk.LabelFrame):
         ttk.Label(self, text="Search by title:").pack(anchor="w")
 
         self.search_entry = ttk.Entry(self)
-        self.search_entry.pack(fill="x", pady=(2, 8))
+        self.search_entry.pack(fill="x", pady=(scale(3), scale(9)))
         # bind() connects an event (a key being released) to a function.
         self.search_entry.bind("<KeyRelease>", self._on_search)
 

@@ -45,31 +45,53 @@ class ChartsTab(BaseTab):
         self.df = self.movies.to_dataframe()
 
         bar = ttk.Frame(self)
-        bar.pack(fill="x", pady=(0, 10))
+        bar.pack(fill="x", pady=(0, self.px(12)))
         ttk.Label(bar, text="Chart:").pack(side="left")
         self.chooser = ttk.Combobox(bar, state="readonly", width=40,
                                     values=list(self.charts.keys()))
         self.chooser.current(0)
-        self.chooser.pack(side="left", padx=8)
+        self.chooser.pack(side="left", padx=self.px(8))
         self.chooser.bind("<<ComboboxSelected>>", self.draw)
 
-        self.figure = Figure(figsize=(9, 5), dpi=100)
+        # dpi=100 was written for a 100% screen. On a 150% one the figure
+        # would be drawn at two thirds size and then stretched by Tk, which
+        # is exactly the blurring that claiming DPI awareness was meant to
+        # avoid - so the figure is told about the screen as well.
+        self.figure = Figure(figsize=(9, 5), dpi=100 * self.theme.scale)
+        self.figure.patch.set_facecolor(self.palette.surface)
         self.canvas = FigureCanvasTkAgg(self.figure, master=self)
-        self.canvas.get_tk_widget().pack(fill="both", expand=True)
+        widget = self.canvas.get_tk_widget()
+        # The canvas is a plain tk widget, so no ttk style reaches it. Left
+        # alone it is a white rectangle, which shows as a bright halo around
+        # the chart on a dark window.
+        widget.configure(background=self.palette.surface,
+                         highlightthickness=0, borderwidth=0)
+        widget.pack(fill="both", expand=True)
 
         toolbar_frame = ttk.Frame(self)
         toolbar_frame.pack(fill="x")
-        NavigationToolbar2Tk(self.canvas, toolbar_frame).update()
+        self.toolbar = NavigationToolbar2Tk(self.canvas, toolbar_frame)
+        self.toolbar.update()
+        # The zoom-and-save toolbar is built out of old-style tk buttons, so
+        # it arrives white whatever the rest of the window is doing.
+        self.theme.style_toolbar(self.toolbar)
 
         self.draw()
 
     # ---- the one callback -------------------------------------------------
 
     def draw(self, event=None):
-        """Clear the figure, run the chosen chart method, and show it."""
+        """Clear the figure, run the chosen chart method, and show it.
+
+        The theme is applied AFTER the chart method rather than before it,
+        because that is when the things being recoloured exist: a chart only
+        has a legend once the method that calls ax.legend() has run.
+        """
         self.figure.clear()
         axes = self.figure.add_subplot(111)
         self.charts[self.chooser.get()](axes)
+        self.theme.style_axes(axes)
+        self.theme.style_legend(axes)
         self.figure.tight_layout()
         self.canvas.draw()
 
@@ -77,30 +99,35 @@ class ChartsTab(BaseTab):
 
     def chart_gross_by_genre(self, ax):
         table = GenreAnalyzer(self.movies).run().sort_values("avg_gross")
-        ax.barh(table.index, table["avg_gross"] / 1e6, color="#55A868")
+        ax.barh(table.index, table["avg_gross"] / 1e6,
+                color=self.theme.chart("green"))
         ax.set_title("Average box office by genre")
         ax.set_xlabel("$ millions per film")
 
     def chart_roi_by_genre(self, ax):
         table = GenreAnalyzer(self.movies).run().sort_values("median_roi")
-        ax.barh(table.index, table["median_roi"], color="#4C72B0")
-        ax.axvline(1.0, color="red", linestyle="--", label="break even")
+        ax.barh(table.index, table["median_roi"],
+                color=self.theme.chart("blue"))
+        ax.axvline(1.0, color=self.theme.chart("rule"), linestyle="--",
+                   label="break even")
         ax.set_title("Typical return per dollar spent")
         ax.set_xlabel("ROI (times the budget)")
         ax.legend()
 
     def chart_flop_by_genre(self, ax):
         table = GenreAnalyzer(self.movies).run().sort_values("flop_rate")
-        ax.barh(table.index, table["flop_rate"], color="#C44E52")
+        ax.barh(table.index, table["flop_rate"],
+                color=self.theme.chart("red"))
         ax.set_title("Share of films that failed to earn back their budget")
         ax.set_xlabel("Flop rate (%)")
 
     def chart_over_time(self, ax):
         table = TrendAnalyzer(self.movies).run()
-        ax.plot(table.index, table["avg_budget"] / 1e6,
-                marker="o", markersize=3, color="#C44E52", label="Budget")
-        ax.plot(table.index, table["avg_gross"] / 1e6,
-                marker="s", markersize=3, color="#55A868", label="Box office")
+        ax.plot(table.index, table["avg_budget"] / 1e6, marker="o",
+                markersize=3, color=self.theme.chart("red"), label="Budget")
+        ax.plot(table.index, table["avg_gross"] / 1e6, marker="s",
+                markersize=3, color=self.theme.chart("green"),
+                label="Box office")
         ax.set_title("Films cost more - and earn more - than they used to")
         ax.set_xlabel("Year")
         ax.set_ylabel("$ millions")
@@ -108,11 +135,12 @@ class ChartsTab(BaseTab):
 
     def chart_budget_vs_gross(self, ax):
         ax.scatter(self.df["budget"] / 1e6, self.df["gross"] / 1e6,
-                   alpha=0.25, s=10, color="#4C72B0")
+                   alpha=0.25, s=10, color=self.theme.chart("blue"))
         slope, intercept = np.polyfit(self.df["budget"], self.df["gross"], 1)
         line_x = np.linspace(self.df["budget"].min(), self.df["budget"].max(), 100)
-        ax.plot(line_x / 1e6, (slope * line_x + intercept) / 1e6, color="red",
-                linewidth=2, label=f"${slope:.2f} back per $1 spent")
+        ax.plot(line_x / 1e6, (slope * line_x + intercept) / 1e6,
+                color=self.theme.chart("rule"), linewidth=2,
+                label=f"${slope:.2f} back per $1 spent")
         ax.set_title(f"Budget vs box office "
                      f"(correlation {self.df['budget'].corr(self.df['gross']):.2f})")
         ax.set_xlabel("Budget ($ millions)")
@@ -121,11 +149,12 @@ class ChartsTab(BaseTab):
 
     def chart_budget_vs_score(self, ax):
         ax.scatter(self.df["budget"] / 1e6, self.df["score"],
-                   alpha=0.25, s=10, color="#8172B2")
+                   alpha=0.25, s=10, color=self.theme.chart("purple"))
         slope, intercept = np.polyfit(self.df["budget"], self.df["score"], 1)
         line_x = np.linspace(self.df["budget"].min(), self.df["budget"].max(), 100)
         ax.plot(line_x / 1e6, slope * line_x + intercept,
-                color="red", linewidth=2, label="best fit (almost flat)")
+                color=self.theme.chart("rule"), linewidth=2,
+                label="best fit (almost flat)")
         correlation = self.df["budget"].corr(self.df["score"])
         ax.set_title(f"Money does not buy a good film "
                      f"(correlation only {correlation:.2f})")
@@ -137,12 +166,15 @@ class ChartsTab(BaseTab):
         table = (self.df.groupby("month")["gross"].mean()
                  .reindex(DataLoader.MONTHS))
         average = table.mean()
-        colors = ["#C44E52" if value > average else "#4C72B0" for value in table]
+        above, below = self.theme.chart("red"), self.theme.chart("blue")
+        colors = [above if value > average else below for value in table]
         ax.bar(range(len(table)), table.values / 1e6, color=colors)
         ax.set_xticks(range(len(table)))
         ax.set_xticklabels([m[:3] for m in table.index])
-        ax.axhline(average / 1e6, color="black", linestyle="--",
-                   label="yearly average")
+        # "black" would be an invisible line on a dark window, so the
+        # reference line takes its colour from the theme like everything else.
+        ax.axhline(average / 1e6, color=self.theme.chart("guide"),
+                   linestyle="--", label="yearly average")
         ax.set_title("Films released in summer and at Christmas earn more")
         ax.set_ylabel("Average box office ($ millions)")
         ax.legend()
@@ -153,9 +185,9 @@ class ChartsTab(BaseTab):
         subset = table.loc[main]
         positions = np.arange(len(subset))
         ax.bar(positions - 0.2, subset["avg_budget"] / 1e6, 0.4,
-               label="Budget", color="#C44E52")
+               label="Budget", color=self.theme.chart("red"))
         ax.bar(positions + 0.2, subset["avg_gross"] / 1e6, 0.4,
-               label="Box office", color="#55A868")
+               label="Box office", color=self.theme.chart("green"))
         ax.set_xticks(positions)
         ax.set_xticklabels(subset.index)
         ax.set_title("Average budget vs box office by age rating")

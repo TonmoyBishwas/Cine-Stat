@@ -8,3 +8,12 @@ venv/
 
 # The OpenRouter API key lives here and must never be committed.
 .env
+
+# Windows leftovers
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+*.lnk
+
+# Scaffolding written by tools/make_icon.py on its way to the .ico
+assets/_icon_*.png
