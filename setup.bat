@@ -59,8 +59,22 @@ echo  Using:
 echo.
 
 REM ---- 2. the virtual environment -------------------------------------------
-if exist ".venv\Scripts\python.exe" goto :venv_ready
+REM  A .venv is tied to the Python that made it: its python.exe is only a
+REM  launcher that forwards to that install's full path. A .venv copied from
+REM  another computer (a zip of the folder, a USB stick) therefore exists but
+REM  cannot run - "No Python at 'C:\Users\someone-else\...'". So the test is
+REM  whether it runs, not whether it exists, and a dead one is rebuilt.
+if not exist ".venv\Scripts\python.exe" goto :make_venv
+".venv\Scripts\python.exe" -c "import sys" >nul 2>nul
+if %errorlevel% equ 0 goto :venv_ready
 
+echo  The .venv folder here does not work on this computer - it was made
+echo  on another one, or by a Python that has since been removed.
+echo  Deleting it and making a fresh one ...
+rmdir /s /q ".venv"
+if exist ".venv" goto :venv_stuck
+
+:make_venv
 echo  Creating the virtual environment in .venv ...
 %LAUNCHER% -m venv .venv
 if %errorlevel% neq 0 goto :venv_failed
@@ -69,6 +83,15 @@ goto :venv_ready
 :venv_failed
 echo.
 echo  Could not create the virtual environment - the message above says why.
+echo.
+pause
+exit /b 1
+
+:venv_stuck
+echo.
+echo  Could not delete the old .venv folder - something may still be using
+echo  it. Close CineStat and any terminals open in this folder, delete
+echo  .venv by hand, and run this file again.
 echo.
 pause
 exit /b 1

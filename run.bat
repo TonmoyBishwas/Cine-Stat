@@ -17,11 +17,23 @@ REM ---------------------------------------------------------------------------
 setlocal
 cd /d "%~dp0"
 
-if exist ".venv\Scripts\python.exe" (
-    set "PYTHON=.venv\Scripts\python.exe"
-    goto :run
-)
+REM  The .venv has to actually run, not just exist: one copied over from
+REM  another computer points at that computer's Python and fails with
+REM  "No Python at ...". setup.bat rebuilds such a .venv; here it is skipped.
+if not exist ".venv\Scripts\python.exe" goto :no_venv
+".venv\Scripts\python.exe" -c "import sys" >nul 2>nul
+if %errorlevel% neq 0 goto :bad_venv
+set "PYTHON=.venv\Scripts\python.exe"
+goto :run
 
+:bad_venv
+echo.
+echo The .venv folder here was made on another computer and does not work
+echo on this one. Run setup.bat once to rebuild it. Trying the system
+echo Python for now ...
+echo.
+
+:no_venv
 where py >nul 2>nul
 if %errorlevel% equ 0 (
     set "PYTHON=py -3"
