@@ -19,6 +19,9 @@ and **what should I watch next?**
 > **New to the project, or about to present it?** Read
 > **[explain/](explain/README.md)** — a plain-English walkthrough of what every
 > file does, how they fit together, and where each OOP idea lives in the code.
+>
+> **Asking an AI about this project?** Give it **[CONTEXT.md](CONTEXT.md)** — the
+> whole project, its numbers and its design decisions, condensed into one file.
 
 The project comes in two halves that share the same code:
 
